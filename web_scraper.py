@@ -43,9 +43,14 @@ def scrape_page(url):
             price_match = re.search(r"\d+\.\d+", price_text)
             price = float(price_match.group()) if price_match else 0
 
-            # Rating (convert to number)
-            rating_text = book.p.get("class", ["", ""])[1]
-            rating = rating_map.get(rating_text, 0)
+            # Rating (find the correct p tag with star-rating class)
+            rating_p = book.find("p", class_=re.compile("star-rating"))
+            if rating_p:
+                classes = rating_p.get("class", [])
+                rating_text = next((c for c in classes if c in rating_map), None)
+                rating = rating_map.get(rating_text, 0)
+            else:
+                rating = 0
 
             data.append({
                 "title": title,
@@ -53,7 +58,7 @@ def scrape_page(url):
                 "rating": rating
             })
 
-        except Exception as e:
+        except (AttributeError, IndexError, ValueError) as e:
             print(f"Skipping item due to error: {e}")
             continue
 
