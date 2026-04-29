@@ -5,11 +5,9 @@ import time
 import re
 
 # CONFIGURATION
-base_url = "http://books.toscrape.com/catalogue/page-{}.html"
 headers = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115 Safari/537.36"
 }
-delay = 1.5
 
 rating_map = {
     "One": 1,
@@ -31,6 +29,9 @@ def fetch_page(url):
 
 
 def parse_books(html):
+    if not html:
+        return []
+
     soup = BeautifulSoup(html, "html.parser")
     books = soup.find_all("article", class_="product_pod")
 
@@ -41,9 +42,11 @@ def parse_books(html):
             title = book.h3.a.get("title", "").strip()
 
             price_text = book.find("p", class_="price_color").text
-            price = float(re.search(r"\d+\.\d+", price_text).group())
+            price_match = re.search(r"\d+\.\d+", price_text)
+            price = float(price_match.group()) if price_match else 0
 
-            rating_class = book.find("p", class_=re.compile("star-rating")).get("class")
+            rating_tag = book.find("p", class_=re.compile("star-rating"))
+            rating_class = rating_tag.get("class") if rating_tag else []
             rating_word = next((c for c in rating_class if c in rating_map), None)
             rating = rating_map.get(rating_word, 0)
 
@@ -59,33 +62,24 @@ def parse_books(html):
     return results
 
 
-# Orchestration
-def scrape_pages(total_pages):
-    all_results = []
+# ORCHESTRATION
+def scrape_pages(base_url, total_pages, delay=1.5):
+    all_data = []
 
     for page in range(1, total_pages + 1):
         url = base_url.format(page)
         print(f"[INFO] Scraping page {page}...")
 
         html = fetch_page(url)
-        if html:
-            books = parse_books(html)
-            all_results.extend(books)
+        data = parse_books(html)
+        all_data.extend(data)
 
         time.sleep(delay)
 
-    return all_results
+    return all_data
 
-
-# EXPORTATION
-def save_to_csv(data, filename="products.csv"):
-    df = pd.DataFrame(data)
-    df.to_csv(filename, index=False, encoding="utf-8")
-    print(f"[SUCCESS] Data saved to {filename}")
-    
 
 def validate_data(data):
-    """Remove invalid or incomplete records."""
     cleaned = []
 
     for item in data:
@@ -99,84 +93,32 @@ def validate_data(data):
     return cleaned
 
 
+# EXPORTATION
+def save_to_csv(data, filename):
+    df = pd.DataFrame(data)
+    df.to_csv(filename, index=False, encoding="utf-8")
+    print(f"[SUCCESS] Data saved to {filename}")
+
+
 # MAIN
 if __name__ == "__main__":
+
+    base_url = input("Enter base URL (use {} for page number): ")
 
     try:
         pages = int(input("Enter number of pages to scrape: "))
         if pages <= 0:
             raise ValueError
     except ValueError:
-        print("Invalid input. Using default = 1 page")
+        print("Invalid input. Using 1 page.")
         pages = 1
 
-    data = scrape_pages(pages)
+    output_file = input("Enter output filename (e.g. data.csv): ")
+
+    data = scrape_pages(base_url, pages)
     data = validate_data(data)
 
     if data:
-        save_to_csv(data)
+        save_to_csv(data, output_file)
     else:
-        print("[INFO] No valid data scraped.")        try:
-            # Title
-            title = book.h3.a.get("title", "").strip()
-
-            # Price (convert to float)
-            price_text = book.find("p", class_="price_color").text
-            price_match = re.search(r"\d+\.\d+", price_text)
-            price = float(price_match.group()) if price_match else 0
-
-            # Rating (find the correct p tag with star-rating class)
-            rating_p = book.find("p", class_=re.compile("star-rating"))
-            if rating_p:
-                classes = rating_p.get("class", [])
-                rating_text = next((c for c in classes if c in rating_map), None)
-                rating = rating_map.get(rating_text, 0)
-            else:
-                rating = 0
-
-            data.append({
-                "title": title,
-                "price": price,
-                "rating": rating
-            })
-
-        except (AttributeError, IndexError, ValueError) as e:
-            print(f"Skipping item due to error: {e}")
-            continue
-
-    return data
-
-
-def scrape_multiple_pages(pages=3):
-    all_data = []
-
-    for page in range(1, pages + 1):
-        url = BASE_URL.format(page)
-        print(f"Scraping page {page}...")
-        data = scrape_page(url)
-        all_data.extend(data)
-
-        time.sleep(2)  # Be respectful to the server
-
-    return all_data
-
-
-if __name__ == "__main__":
-    # Input validation
-    while True:
-        try:
-            pages = int(input("Enter number of pages to scrape: "))
-            if pages > 0:
-                break
-            print("Please enter a positive number.")
-        except ValueError:
-            print("Invalid input. Please enter a number.")
-
-    results = scrape_multiple_pages(pages)
-
-    if results:
-        df = pd.DataFrame(results)
-        df.to_csv("products.csv", index=False, encoding="utf-8")
-        print("Done! Data saved to products.csv")
-    else:
-        print("No data scraped.")
+        print("[INFO] No valid data scraped.")
